@@ -26,6 +26,7 @@ the chords the left hand plays.*
 rag_time/
 ├── shiny_app.R          ♩  THE app. Run this, deploy this.
 ├── R/                   ♩  everything the app needs (sourced by shiny_app.R)
+│   ├── classification.R    the classification banner above every screen
 │   ├── config.R            endpoints, models, settings  ← edit model names here
 │   ├── llm.R               keys (per session), chat + embedding calls
 │   ├── retrieve.R          vector + keyword search in DuckDB, rank fusion
@@ -42,6 +43,7 @@ rag_time/
 ├── build/extract.R      𝄽  PDF/Quarto text extraction for the build
 ├── eval/eval_rag.R      𝄽  accuracy check (not deployed)
 ├── deploy.R             𝄽  publish to Posit Connect
+├── switch_to_work.R     𝄽  one-time: repoint repo links, paths, endpoint, models
 └── _archive/            𝄽  earlier attempts, kept only for reference — not used
 ```
 
@@ -52,18 +54,19 @@ rag_time/
 Every model call goes through **ellmer** to an OpenAI endpoint (`R/llm.R`,
 settings in `R/config.R`). Embeddings go to the same endpoint's `/embeddings`.
 
-1. `.Renviron`:
-   ```
-   OPENAI_API_KEY=...
-   SVYMETH_CORPUS=<path to UMD_JPSM_coursework>
-   SVYMETH_CACHE=<a scratch folder>        # optional; speeds up rebuilds
-   ```
-2. In `R/config.R`, set `chat` and `worker` to the model names your endpoint
-   serves (or set `SVYMETH_CHAT_MODEL` / `SVYMETH_WORKER_MODEL`).
-3. `source("build_store.R")` — embeddings only (~100 calls, no chat model).
+1. Fill in the `WORK` list at the top of `switch_to_work.R` (work repo URL,
+   coursework path, endpoint, model names) and `source("switch_to_work.R")`.
+   It rewrites the defaults in `R/config.R`, removes the OpenRouter file,
+   writes the paths to a git-ignored `.Renviron` and checks the folder.
+   Put `OPENAI_API_KEY` in your user `.Renviron`. Delete the script after.
+2. Source links under each answer point to `SVY_SOURCE_URL` in `R/config.R`
+   (`{path}` = the file's path in the coursework repo), so they follow the
+   work repo. `SVYMETH_SOURCE_URL` overrides it on Connect without editing.
+3. `source("build_store.R")` — embeddings only (~110 calls, no chat model).
    Resumes if interrupted.
 4. `shiny::runApp("shiny_app.R")` to check, then `source("deploy.R")`.
-   On Connect set `SVYMETH_KEY_SOURCE=analyst`.
+   On Connect set `SVYMETH_KEY_SOURCE=analyst` and `RAGTIME_CLASSIFICATION`
+   to your marking (the red banner on every screen; default UNCLASSIFIED).
 
 Tab **1. Start here** has the docs and a box for your key. Tab **2.
 Methodologist** is the chat. Every answer cites `[S1]`, `[S2]`… with links to
@@ -99,7 +102,7 @@ admin PDFs, data/binary files. Image-only PDFs are listed and skipped.
 | Part | Model | Set in |
 |---|---|---|
 | Chat (talks to analysts) | your endpoint's main model | `R/config.R` |
-| Worker (evaluation) | a smaller, cheaper model | `R/config.R` |
+| Build-time only (PDF conversion, equation names) | a vision-capable model | `SVYMETH_BUILD_MODEL` |
 | Embeddings | text-embedding-3-small, 512 dims | `R/config.R` (must match the store) |
 
 The embedding model must match the store; the app refuses to search otherwise.

@@ -85,6 +85,10 @@ search_bm25 <- function(st, query, n, k1 = 1.2, b = 0.75) {
 #   cosine to blend, so ranks are fused rather than scores. One passage (plus at
 #   most one formula card) per file keeps the context from being five slices
 #   of the same deck.
+CODE_INTENT_RX <- paste0("\\bin R\\b|\\bR (code|function|package|script|syntax)|\\bcode\\b|",
+                         "\\bfunction\\b|\\bpackage\\b|\\bsyntax\\b|\\bsvy\\w*|\\bsurvey::|\\bdplyr\\b|\\bggplot")
+is_code_question <- function(q) grepl(CODE_INTENT_RX, q, perl = TRUE)
+
 retrieve <- function(st, query, k = SVY_SETTINGS$top_k, qvec = NULL) {
   n  <- SVY_SETTINGS$pool; rk <- SVY_SETTINGS$rrf_k
   qvec <- qvec %||% embed_texts(query)[1, ]
@@ -98,7 +102,11 @@ retrieve <- function(st, query, k = SVY_SETTINGS$top_k, qvec = NULL) {
   rows <- DBI::dbGetQuery(st$con, sprintf(
     "SELECT id, origin, doc_type, course, tier, context, text
        FROM svy_chunks WHERE id IN (%s)", paste(f$id, collapse = ",")))
+  # A question asking for R code wants the code passage, not a formula card
+  #   from some other file; formula cards count for less on such questions.
+  w <- if (is_code_question(query)) SVY_SETTINGS$card_weight_code else 1
   dplyr::inner_join(f, rows, by = "id") |>
+    dplyr::mutate(score = dplyr::if_else(doc_type == "equation", score * w, score)) |>
     dplyr::arrange(dplyr::desc(score)) |>
     # one passage and at most one formula card per file
     dplyr::distinct(origin, is_eq = doc_type == "equation", .keep_all = TRUE) |>

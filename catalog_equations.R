@@ -6,7 +6,7 @@
 #
 # Reads the LaTeX that is already there -- Quarto/R Markdown sources, the
 #   markdown twins convert_pdfs.R wrote for the PDFs, the textbook chapters --
-#   so finding equations costs nothing. The worker model then names each one
+#   so finding equations costs nothing. A build-time model (CATALOG$model) then names each one
 #   (one structured call per file, up to 30 equations each).
 #
 # build_store.R turns each row into a small searchable "formula card", so a
@@ -20,7 +20,9 @@ invisible(lapply(c(sort(list.files("R", "^(config|llm.*)\\.R$", full.names = TRU
 CATALOG <- list(
   corpus   = Sys.getenv("SVYMETH_CORPUS"),
   cache    = file.path(tools::R_user_dir("ragtime", "cache"), "equations"),
+  model    = Sys.getenv("SVYMETH_BUILD_MODEL", "google/gemma-4-31b-it"),   # build-time only
   per_call = 30L,
+  retry_per_call = 6L,
   parallel = 8L)
 
 EQ_BLOCK_RX <- "(?s)\\$\\$(.+?)\\$\\$|\\\\begin\\{(equation|align|eqnarray|gather|multline)\\*?\\}(.+?)\\\\end\\{\\2\\*?\\}"
@@ -65,27 +67,23 @@ EQ_TYPE <- ellmer::type_object(items = ellmer::type_array(ellmer::type_object(
   description = ellmer::type_string(),
   symbols = ellmer::type_string("e.g. 'n: sample size; b: elements per cluster'"))))
 
-catalog_equations <- function(corpus = CATALOG$corpus) {
-  stopifnot("Set SVYMETH_CORPUS" = dir.exists(corpus))
-  t0 <- Sys.time(); dir.create(CATALOG$cache, recursive = TRUE, showWarnings = FALSE)
-  src <- latex_sources(corpus)
-  eqs <- src |>
-    mutate(eq = map(path, function(p) extract_equations(paste(readLines(p, warn = FALSE, encoding = "UTF-8"), collapse = "\n")))) |>
-    select(-path) |> tidyr::unnest(eq) |>
-    mutate(group = paste0(origin, "#", (row_number() - 1L) %/% CATALOG$per_call), .by = origin) |>
-    mutate(i = row_number(), .by = group,
-           cache_file = file.path(CATALOG$cache, paste0(gsub("[^A-Za-z0-9]+", "_", group), ".rds")))
-  message(nrow(eqs), " equations in ", n_distinct(eqs$origin), " files; ",
-          n_distinct(eqs$group), " naming calls (", n_distinct(eqs$group[file.exists(eqs$cache_file)]), " cached)")
+# Groups equations `size` at a time per file; one naming call per group.
+group_equations <- function(eqs, size, tag) eqs |>
+  mutate(group = paste0(tag, origin, "#", (row_number() - 1L) %/% size), .by = origin) |>
+  mutate(i = row_number(), .by = group,
+         cache_file = file.path(CATALOG$cache, paste0(gsub("[^A-Za-z0-9]+", "_", group), ".rds")))
 
+# Names every group that is not cached yet; returns the names found so far.
+name_groups <- function(eqs) {
   todo <- eqs |> filter(!file.exists(cache_file)) |> group_by(group, cache_file) |>
     summarise(prompt = paste0("Source: ", first(origin), "\n\n",
                               paste0("Equation ", i, ":\n$$", latex, "$$\nContext: ", str_trunc(context, 650), collapse = "\n\n")),
               .groups = "drop")
+  message(n_distinct(eqs$group), " naming calls (", nrow(todo), " to make)")
   if (nrow(todo)) {
     batches <- split(seq_len(nrow(todo)), ceiling(seq_len(nrow(todo)) / (CATALOG$parallel * 4)))
     iwalk(batches, function(ix, b) {
-      chat <- llm_chat("worker", NAME_SYS, temperature = 0)
+      chat <- llm_chat(NAME_SYS, temperature = 0, model = CATALOG$model)
       res <- tryCatch(ellmer::parallel_chat_structured(chat, as.list(todo$prompt[ix]), type = EQ_TYPE,
                                                         max_active = CATALOG$parallel, convert = FALSE),
                       error = function(e) { message("  batch ", b, " failed: ", conditionMessage(e)); NULL })
@@ -95,10 +93,34 @@ catalog_equations <- function(corpus = CATALOG$corpus) {
       message(sprintf("  named batch %s/%d", b, length(batches)))
     })
   }
-  named <- eqs |> distinct(group, cache_file) |> filter(file.exists(cache_file)) |>
+  eqs |> distinct(group, cache_file) |> filter(file.exists(cache_file)) |>
     mutate(n = map(cache_file, readRDS)) |> select(group, n) |> tidyr::unnest(n) |>
-    mutate(i = as.integer(i))
-  out <- eqs |> left_join(named, by = c("group", "i")) |>
+    mutate(i = as.integer(i)) |> filter(!is.na(name), nzchar(name)) |>
+    distinct(group, i, .keep_all = TRUE)
+}
+
+catalog_equations <- function(corpus = CATALOG$corpus) {
+  stopifnot("Set SVYMETH_CORPUS" = dir.exists(corpus))
+  t0 <- Sys.time(); dir.create(CATALOG$cache, recursive = TRUE, showWarnings = FALSE)
+  eqs <- latex_sources(corpus) |>
+    mutate(eq = map(path, function(p) extract_equations(paste(readLines(p, warn = FALSE, encoding = "UTF-8"), collapse = "\n")))) |>
+    select(-path) |> tidyr::unnest(eq) |>
+    mutate(eq_id = row_number())
+  message(nrow(eqs), " equations in ", n_distinct(eqs$origin), " files")
+
+  # Pass 1: up to 30 per call. Pass 2: whatever pass 1 left unnamed (a call
+  #   that failed, or equations the model skipped), 6 per call.
+  g1 <- group_equations(eqs, CATALOG$per_call, "")
+  n1 <- g1 |> inner_join(name_groups(g1), by = c("group", "i"))
+  left <- eqs |> filter(!eq_id %in% n1$eq_id)
+  n2 <- if (nrow(left)) {
+    message(nrow(left), " equations unnamed after pass 1; retrying in smaller calls")
+    g2 <- group_equations(left, CATALOG$retry_per_call, "retry_")
+    g2 |> inner_join(name_groups(g2), by = c("group", "i"))
+  } else NULL
+  named <- bind_rows(n1, n2) |> select(eq_id, name, description, symbols) |> distinct(eq_id, .keep_all = TRUE)
+
+  out <- eqs |> left_join(named, by = "eq_id") |>
     mutate(course = doc_meta(origin)$course) |>
     select(origin, course, page, name, description, symbols, latex)
   f <- file.path(corpus, "equation_catalog.csv")

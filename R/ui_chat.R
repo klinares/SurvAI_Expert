@@ -47,11 +47,10 @@ mod_chat_ui <- function(id) {
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
       width = 280,
-      shiny::selectInput(ns("role"), "Model", choices = c("Chat model" = "chat", "Worker model" = "worker")),
       shiny::sliderInput(ns("k"), "Sources per answer", 4, 12, SVY_SETTINGS$top_k, 1),
       shiny::actionButton(ns("new"), "New conversation", class = "btn-sm w-100"),
       shiny::uiOutput(ns("meter"))),
-    shinychat::chat_ui(ns("chat"), height = "calc(100vh - 140px)",
+    shinychat::chat_ui(ns("chat"), height = "calc(100vh - 170px)",
       messages = list("Ask about a method, a formula, or how to do something in R. Answers come from your course materials, with sources.")))
 }
 
@@ -62,7 +61,6 @@ mod_chat_server <- function(id, state) {
     last_q <- shiny::reactiveVal(NULL)
     reset <- function() { chat(NULL); turns(0L); last_q(NULL); shinychat::chat_clear("chat") }
 
-    shiny::observeEvent(input$role, reset(), ignoreInit = TRUE)
     shiny::observeEvent(input$new, reset())
     # A chat object holds the key it was built with; a new key means a new one.
     shiny::observeEvent(state$key_version, chat(NULL), ignoreInit = TRUE)
@@ -72,7 +70,7 @@ mod_chat_server <- function(id, state) {
       if (is.null(state$store)) return(shinychat::chat_append("chat",
         paste("The store is not available:", state$store_error)))
       res <- try(shiny::withProgress(message = "Searching your materials and answering...", value = 0.5, {
-        if (is.null(chat())) chat(llm_chat(input$role, system_prompt = svy_system_prompt()))
+        if (is.null(chat())) chat(llm_chat(svy_system_prompt()))
         ask_methodologist(chat(), state$store, q, input$k, previous = last_q())
       }), silent = TRUE)
       if (inherits(res, "try-error")) {

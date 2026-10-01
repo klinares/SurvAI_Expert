@@ -5,3 +5,5 @@ deploy.R
 parse_textbook.R
 convert_pdfs.R
 catalog_equations.R
+switch_to_work.R
+.Renviron

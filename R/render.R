@@ -53,7 +53,7 @@ source_link <- function(origin, page) {
   if (startsWith(origin, "book/")) return(htmltools::htmlEscape(origin))
   enc <- paste(purrr::map_chr(strsplit(origin, "/")[[1]],
                               function(s) utils::URLencode(s, reserved = TRUE)), collapse = "/")
-  url <- paste0(SVY_REPO_URL, "/blob/main/", enc,
+  url <- paste0(sub("{path}", enc, SVY_SOURCE_URL, fixed = TRUE),
                 if (!is.na(page) && grepl("\\.pdf$", origin, ignore.case = TRUE))
                   paste0("#page=", page) else "")
   sprintf("<a href='%s' target='_blank'>%s</a>", url, htmltools::htmlEscape(origin))

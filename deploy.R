@@ -7,7 +7,8 @@
 #   pdftools and the coursework, which Connect does not have).
 #
 # On Connect, set in the content's Vars pane:
-#   SVYMETH_KEY_SOURCE = analyst   (each analyst pastes their own key)
+#   SVYMETH_KEY_SOURCE     = analyst          (each analyst pastes their own key)
+#   RAGTIME_CLASSIFICATION = <your marking>   (banner text; default UNCLASSIFIED)
 # The embedding model and dims in config.R must match the store you deploy;
 #   the app checks and refuses otherwise. Any R/llm_*.R provider file present
 #   is deployed too, so delete R/llm_openrouter.R where it is not used.

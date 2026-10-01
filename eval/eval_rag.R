@@ -2,15 +2,15 @@
 #
 #   source("eval/eval_rag.R"); ev <- run_eval()      # from the app folder
 #
-# LLM calls: ~120 to write questions + 2 x 40 answers + 80 grades = ~280,
-#   all on the worker model except the chat-model answers. Every stage is
+# LLM calls: ~120 to write questions + 40 answers (the app's chat model) +
+#   40 grades = ~200. Questions and grades use EV$model (SVYMETH_EVAL_MODEL). Every stage is
 #   cached in eval/*.rds; delete a file to redo that stage.
 
 suppressPackageStartupMessages({ library(dplyr); library(purrr); library(stringr); library(tibble) })
 options(svymeth.app_dir = normalizePath("."))
 invisible(lapply(sort(list.files("R", "\\.R$", full.names = TRUE)), source))
 
-EV <- list(dir = "eval", n_items = c(equation = 45L, concept = 45L, code = 30L),
+EV <- list(dir = "eval", model = Sys.getenv("SVYMETH_EVAL_MODEL", "google/gemma-4-31b-it"), n_items = c(equation = 45L, concept = 45L, code = 30L),
            n_answer = c(equation = 16L, concept = 14L, code = 10L), seed = 752L)
 
 cache <- function(name, f) {
@@ -49,7 +49,7 @@ GEN_SYS <- paste(
   "that task in R. Ask about substance, never about file paths, seeds or assignment logistics.")
 
 gen_one <- function(text, kind) {
-  ch <- llm_chat("worker", GEN_SYS, temperature = 0.3)
+  ch <- llm_chat(GEN_SYS, temperature = 0.3, model = EV$model)
   tryCatch(ch$chat_structured(paste0("Passage type: ", kind, "\n\nPassage:\n", str_trunc(text, 3500)),
     type = ellmer::type_object(question = ellmer::type_string(), answer = ellmer::type_string())),
     error = function(e) list(question = NA_character_, answer = NA_character_))
@@ -88,14 +88,14 @@ retrieval_summary <- function(r) {
     mutate(across(where(is.double), function(x) round(x, 3)))
 }
 
-run_answers <- function(st, sub, role) {
+run_answers <- function(st, sub) {
   res <- map(sub$question, function(q) {
-    ch <- llm_chat(role, svy_system_prompt())
+    ch <- llm_chat(svy_system_prompt())
     tryCatch(ask_methodologist(ch, st, q),
              error = function(e) list(answer = paste("ERROR:", conditionMessage(e)), hits = tibble(), secs = NA_real_))
-  }, .progress = role)
+  }, .progress = "answers")
   sub |> select(item_id, kind, origin, question, ref_answer, gold_latex, text) |>
-    mutate(role = !!role, model = !!svy_profile()[[role]],
+    mutate(model = !!svy_profile()$chat,
            answer = map_chr(res, "answer"), secs = map_dbl(res, "secs"),
            gold_in_ctx = map2_lgl(res, origin, function(x, o) o %in% x$hits$origin),
            audit = map(res, function(x) if (nrow(x$hits)) audit_answer(x$answer, x$hits) else NULL),
@@ -115,7 +115,7 @@ JUDGE_SYS <- paste(
   "unsupported: 1 if the answer asserts substantive facts the reference does not support.")
 
 judge_one <- function(question, text, ref_answer, gold_latex, answer) {
-  ch <- llm_chat("worker", JUDGE_SYS, temperature = 0)
+  ch <- llm_chat(JUDGE_SYS, temperature = 0, model = EV$model)
   tryCatch(ch$chat_structured(paste0(
     "QUESTION:\n", question, "\n\nREFERENCE PASSAGE:\n", str_trunc(text, 3500),
     "\n\nREFERENCE ANSWER:\n", ref_answer, "\n\nEXPECTED FORMULA:\n", coalesce(gold_latex, "(none)"),
@@ -125,7 +125,7 @@ judge_one <- function(question, text, ref_answer, gold_latex, answer) {
     error = function(e) list(correct = NA, equation_correct = NA, unsupported = NA, note = conditionMessage(e)))
 }
 
-run_eval <- function(roles = c("chat", "worker")) {
+run_eval <- function() {
   t0 <- Sys.time()
   st <- open_store(); on.exit(close_store(st), add = TRUE); check_store_matches(st)
   gold <- cache("gold", function() build_gold(st))
@@ -135,7 +135,7 @@ run_eval <- function(roles = c("chat", "worker")) {
 
   set.seed(EV$seed)
   sub <- imap(EV$n_answer, function(n, kd) gold |> filter(kind == kd) |> slice_sample(n = n)) |> list_rbind()
-  ans <- map(roles, function(r) cache(paste0("answers_", r), function() run_answers(st, sub, r))) |> list_rbind()
+  ans <- cache("answers_chat", function() run_answers(st, sub))
   jd <- cache("judged", function() {
     j <- pmap(select(ans, question, text, ref_answer, gold_latex, answer), judge_one, .progress = "judge")
     ans |> mutate(correct = map_int(j, function(x) as.integer(x$correct %||% NA)),

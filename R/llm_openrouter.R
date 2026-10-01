@@ -10,5 +10,4 @@ SVY_LLM_OVERRIDE <- list(
   base_url = "https://openrouter.ai/api/v1",
   key_var  = "OPENROUTER_API_KEY",
   chat     = "meta-llama/llama-4-maverick",
-  worker   = "google/gemma-4-31b-it",
   embed    = "openai/text-embedding-3-small")

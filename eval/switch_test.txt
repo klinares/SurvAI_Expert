@@ -1,0 +1,7 @@
+ran
+  base_url = Sys.getenv("SVYMETH_BASE_URL", "https://llm.example.com/v1"),
+  chat     = Sys.getenv("SVYMETH_CHAT_MODEL",   "gpt-5-test"),
+  worker   = Sys.getenv("SVYMETH_WORKER_MODEL", "gpt-5-mini-test"),
+  "https://github.example.com/acme/UMD_JPSM_coursework/blob/master/{path}")
+openrouter file still there: FALSE
+SVYMETH_CORPUS=D:/repos/UMD_JPSM_coursework

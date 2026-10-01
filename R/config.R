@@ -3,7 +3,7 @@
 #   thing, the key.
 #
 # Every model call goes through ellmer (R/llm.R) to an OpenAI endpoint.
-#   EDIT chat / worker to the model names your endpoint serves. Environment
+#   EDIT chat to the model name your endpoint serves. Environment
 #   variables of the same name override them without editing this file.
 #
 # THE EMBEDDING MODEL AND DIMENSIONS MUST MATCH THE STORE. The store records
@@ -15,7 +15,6 @@ SVY_LLM <- list(
   base_url = Sys.getenv("SVYMETH_BASE_URL", "https://api.openai.com/v1"),
   key_var  = "OPENAI_API_KEY",
   chat     = Sys.getenv("SVYMETH_CHAT_MODEL",   "gpt-4.1"),
-  worker   = Sys.getenv("SVYMETH_WORKER_MODEL", "gpt-4.1-mini"),
   embed    = "text-embedding-3-small")
 
 # An optional R/llm_*.R file may define SVY_LLM_OVERRIDE (a list with the same
@@ -35,6 +34,7 @@ SVY_SETTINGS <- list(
   top_k       = 8L,       # chunks handed to the model
   pool        = 40L,      # candidates per retriever before fusion
   rrf_k       = 60L,
+  card_weight_code = 0.5, # formula-card score multiplier on R-code questions
   ctx_chars   = 1800L,    # per-chunk cap in the prompt
   max_tokens  = 3000L,
   timeout     = 120,
@@ -44,5 +44,8 @@ SVY_SETTINGS <- list(
 svy_app_dir  <- function() getOption("svymeth.app_dir", getwd())
 svy_store_path <- function() file.path(svy_app_dir(), "store", "jpsm.duckdb")
 
-# Course materials repository; sources link here.
-SVY_REPO_URL <- "https://github.com/klinares/UMD_JPSM_coursework"
+# Where the "Sources" links under each answer point. {path} becomes the file's
+#   path inside the coursework repo (e.g. applied_sampling_SURV625/lectures/Lecture6.pdf).
+#   Set SVYMETH_SOURCE_URL to override without editing (e.g. on Connect).
+SVY_SOURCE_URL <- Sys.getenv("SVYMETH_SOURCE_URL",
+  "https://github.com/klinares/UMD_JPSM_coursework/blob/main/{path}")

@@ -36,14 +36,12 @@ llm_api_key <- function() {
 
 # A fresh object per conversation. The key travels in the closure, so a key
 #   change means a new chat object (the chat module does that).
-llm_chat <- function(role = c("chat", "worker"), system_prompt = NULL,
-                     temperature = 0.2, model = NULL) {
-  role <- match.arg(role)
+llm_chat <- function(system_prompt = NULL, temperature = 0.2, model = NULL) {
   prof <- svy_profile()
   key  <- llm_api_key()
   ellmer::chat_openai_compatible(
     base_url = prof$base_url,
-    model = model %||% prof[[role]],
+    model = model %||% prof$chat,
     credentials = function() list(Authorization = paste("Bearer", key)),
     system_prompt = system_prompt,
     params = ellmer::params(temperature = temperature,

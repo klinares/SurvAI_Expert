@@ -17,8 +17,8 @@
 #   run can be stopped and restarted without paying twice.
 #
 # Calls: one per converted page (about 3,500 for the full coursework and
-#   textbook), sent in parallel through ellmer. Uses the "worker" model, which
-#   must accept images.
+#   textbook), sent in parallel through ellmer. Uses CONVERT$model (set
+#   SVYMETH_BUILD_MODEL to change it), which must accept images.
 
 suppressPackageStartupMessages({ library(dplyr); library(purrr); library(stringr); library(tibble) })
 invisible(lapply(c(sort(list.files("R", "^(config|llm.*)\\.R$", full.names = TRUE)), "build/extract.R"), source))
@@ -27,6 +27,7 @@ CONVERT <- list(
   corpus    = Sys.getenv("SVYMETH_CORPUS"),
   book      = Sys.getenv("SVYMETH_BOOK"),
   cache     = file.path(tools::R_user_dir("ragtime", "cache"), "pages"),
+  model     = Sys.getenv("SVYMETH_BUILD_MODEL", "google/gemma-4-31b-it"),   # vision model, build-time only
   dpi       = 110L,
   parallel  = 16L,         # requests in flight
   batch     = 96L)         # pages per saved batch
@@ -66,7 +67,7 @@ convert_pages <- function(jobs) {
       out
     })
     prompts <- map(png, function(f) list("Transcribe this page.", ellmer::content_image_file(f)))
-    chat <- llm_chat("worker", VISION_SYS, temperature = 0)
+    chat <- llm_chat(VISION_SYS, temperature = 0, model = CONVERT$model)
     txt <- tryCatch(
       ellmer::parallel_chat_text(chat, prompts, max_active = CONVERT$parallel),
       error = function(e) { message("  batch ", b, " failed: ", conditionMessage(e)); rep(NA_character_, length(prompts)) })

@@ -57,7 +57,7 @@ mod_start_server <- function(id, state) {
       shiny::tags$table(class = "table table-sm small",
         shiny::tags$tbody(purrr::imap(list(
           Provider = prof$name, Endpoint = prof$base_url,
-          `Chat model` = prof$chat, `Worker model` = prof$worker,
+          `Chat model` = prof$chat,
           `Embedding` = paste0(prof$embed, " (", SVY_SETTINGS$embed_dims, " dims)"),
           `Store built` = m$built_at %||% "--",
           `Store contents` = if (length(m)) paste0(m$n_docs, " files, ", m$n_chunks, " chunks") else "--",
