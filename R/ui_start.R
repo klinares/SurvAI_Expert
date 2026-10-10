@@ -8,12 +8,15 @@ mod_start_ui <- function(id) {
                 shiny::tags$details(shiny::tags$summary(shiny::strong("Reflexes")),
                                     reflex_table_html())),
     bslib::card(
-      bslib::card_header("Your API key"),
+      bslib::card_header("API key"),
       shiny::uiOutput(ns("key_status")),
-      shiny::passwordInput(ns("key"), NULL, width = "100%",
-                           placeholder = "Paste your key (or the passphrase)"),
-      shiny::div(shiny::actionButton(ns("save"), "Use this key", class = "btn-primary"),
-                 shiny::actionButton(ns("clear"), "Forget it")),
+      # The paste box shows only when no key is in use (or on request).
+      shiny::conditionalPanel(
+        "output.need_key || input.change_key % 2 == 1", ns = ns,
+        shiny::passwordInput(ns("key"), NULL, width = "100%",
+                             placeholder = "Paste your key (or the passphrase)"),
+        shiny::div(shiny::actionButton(ns("save"), "Use this key", class = "btn-primary"),
+                   shiny::actionButton(ns("clear"), "Forget it"))),
       shiny::hr(),
       shiny::h6("Configuration"),
       shiny::uiOutput(ns("config"))))
@@ -51,13 +54,18 @@ mod_start_server <- function(id, state) {
     shiny::observeEvent(input$clear, { llm_clear_session_key(token); bump() })
     session$onSessionEnded(function() llm_clear_session_key(token))
 
-    output$key_status <- shiny::renderUI({
+    has_key <- shiny::reactive({
       state$key_version
-      prof <- svy_profile()
-      if (!is.null(llm_session_key()))
-        shiny::p(class = "text-success", "A key you supplied is in use for this session.")
-      else if (server_key_open() && nzchar(Sys.getenv(prof$key_var)))
-        shiny::p(class = "text-muted", "Using the key configured on the server. Paste your own to use it instead.")
+      !is.null(llm_session_key()) ||
+        (server_key_open() && nzchar(Sys.getenv(svy_profile()$key_var)))
+    })
+    output$need_key <- shiny::reactive(!has_key())
+    shiny::outputOptions(output, "need_key", suspendWhenHidden = FALSE)
+
+    output$key_status <- shiny::renderUI({
+      if (has_key())
+        shiny::p(class = "text-success", "\u2713 Key in use. You're ready: open the Methodologist tab. ",
+                 shiny::actionLink(session$ns("change_key"), "Use a different key"))
       else shiny::p(class = "text-warning", "No key yet. The Methodologist tab needs one.")
     })
 
