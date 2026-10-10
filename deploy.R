@@ -41,7 +41,7 @@ if (sys.nframe() == 0L || identical(environment(), globalenv())) {
           else "Deploying without a server key: visitors paste their own.")
   tryCatch(
     rsconnect::deployApp(appDir = ".", appFiles = deploy_files(with_key),
-                         appTitle = "RAG Time", appPrimaryDoc = "shiny_app.R",
+                         appName = "SurvAI_Expert", appTitle = "SurvAI Expert", appPrimaryDoc = "shiny_app.R",
                          forceUpdate = TRUE),
     finally = unlink("key.env"))
 }
