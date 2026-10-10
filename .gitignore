@@ -7,3 +7,5 @@ store/*.wal
 eval/*.rds
 eval/*.csv
 _archive/
+.Renviron
+.env
