@@ -1,7 +1,7 @@
 # Deploys RAG Time to shinyapps.io on every push to main.
-# Needs three repo secrets: SHINYAPPS_NAME, SHINYAPPS_TOKEN, SHINYAPPS_SECRET.
-# No LLM key is used or stored here: analysts paste their own key in the app
-# (SVYMETH_KEY_SOURCE / R/llm.R), so the deployed app holds no OpenRouter key.
+# Repo secrets: SHINYAPPS_NAME, SHINYAPPS_TOKEN, SHINYAPPS_SECRET (required to
+#   deploy), and optionally OPENROUTER_API_KEY + RAGTIME_PASSPHRASE to ship your
+#   key inside the deployed bundle (never in git), unlocked by the passphrase.
 name: deploy
 
 on:
@@ -23,6 +23,8 @@ jobs:
       SHINYAPPS_NAME:   ${{ secrets.SHINYAPPS_NAME }}
       SHINYAPPS_TOKEN:  ${{ secrets.SHINYAPPS_TOKEN }}
       SHINYAPPS_SECRET: ${{ secrets.SHINYAPPS_SECRET }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      RAGTIME_PASSPHRASE: ${{ secrets.RAGTIME_PASSPHRASE }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +43,7 @@ jobs:
         shell: Rscript {0}
         run: |
           files <- c("shiny_app.R", list.files("R", "\\.R$", full.names = TRUE))
-          invisible(lapply(files, parse))
+          invisible(lapply(c(files, "deploy.R"), parse))
           stopifnot(file.exists("store/jpsm.duckdb"))
           cat("ok:", length(files), "files parse; store present\n")
 

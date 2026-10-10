@@ -11,7 +11,7 @@ mod_start_ui <- function(id) {
       bslib::card_header("Your API key"),
       shiny::uiOutput(ns("key_status")),
       shiny::passwordInput(ns("key"), NULL, width = "100%",
-                           placeholder = "Paste your key here"),
+                           placeholder = "Paste your key (or the passphrase)"),
       shiny::div(shiny::actionButton(ns("save"), "Use this key", class = "btn-primary"),
                  shiny::actionButton(ns("clear"), "Forget it")),
       shiny::hr(),
@@ -27,8 +27,12 @@ mod_start_server <- function(id, state) {
     shiny::observeEvent(input$save, {
       k <- trimws(input$key %||% "")
       if (!nzchar(k)) return(shiny::showNotification("Nothing pasted.", type = "warning"))
-      llm_set_session_key(k)
       shiny::updateTextInput(session, "key", value = "")
+      if (llm_try_unlock(k)) {
+        shiny::showNotification("Unlocked: using the owner's key for this session.", type = "message")
+        return(bump())
+      }
+      llm_set_session_key(k)
       # One embedding call proves the key works before the analyst relies on it.
       ok <- try(embed_texts("key check"), silent = TRUE)
       if (inherits(ok, "try-error")) {
@@ -39,6 +43,11 @@ mod_start_server <- function(id, state) {
       } else shiny::showNotification("Key accepted for this session.", type = "message")
       bump()
     })
+    # Bookmarkable unlock: https://<app>/?pass=<passphrase>
+    shiny::observe({
+      q <- shiny::parseQueryString(session$clientData$url_search %||% "")
+      if (!is.null(q$pass) && llm_try_unlock(q$pass)) bump()
+    })
     shiny::observeEvent(input$clear, { llm_clear_session_key(token); bump() })
     session$onSessionEnded(function() llm_clear_session_key(token))
 
@@ -47,7 +56,7 @@ mod_start_server <- function(id, state) {
       prof <- svy_profile()
       if (!is.null(llm_session_key()))
         shiny::p(class = "text-success", "A key you supplied is in use for this session.")
-      else if (identical(SVY_SETTINGS$key_source, "server") && nzchar(Sys.getenv(prof$key_var)))
+      else if (server_key_open() && nzchar(Sys.getenv(prof$key_var)))
         shiny::p(class = "text-muted", "Using the key configured on the server. Paste your own to use it instead.")
       else shiny::p(class = "text-warning", "No key yet. The Methodologist tab needs one.")
     })

@@ -11,6 +11,9 @@ suppressPackageStartupMessages({
   library(shiny); library(bslib)
 })
 options(svymeth.app_dir = normalizePath("."))
+# key.env is written by deploy.R into the deployed bundle only (git-ignored):
+#   the owner's API key and the passphrase that unlocks it.
+if (file.exists("key.env")) readRenviron("key.env")
 invisible(lapply(sort(list.files("R", "\\.R$", full.names = TRUE)), source, local = globalenv()))
 
 # The classification marking sits above everything (R/classification.R).

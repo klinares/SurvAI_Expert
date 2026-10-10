@@ -9,3 +9,4 @@ eval/*.csv
 _archive/
 .Renviron
 .env
+key.env

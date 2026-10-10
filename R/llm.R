@@ -22,9 +22,23 @@ llm_clear_session_key <- function(token) {
   invisible(TRUE)
 }
 
+# The server's key is used without pasting only when key_source is "server"
+#   and no passphrase is set. With RAGTIME_PASSPHRASE set, a session gets the
+#   server key only after unlocking (passphrase in the key box, or ?pass= in the URL).
+server_key_open <- function() identical(SVY_SETTINGS$key_source, "server") &&
+  !nzchar(Sys.getenv("RAGTIME_PASSPHRASE"))
+
+# TRUE (and the session now uses the server key) if x is the passphrase.
+llm_try_unlock <- function(x) {
+  pass <- Sys.getenv("RAGTIME_PASSPHRASE"); key <- Sys.getenv(svy_profile()$key_var)
+  ok <- nzchar(pass) && nzchar(key) && identical(x, pass)
+  if (ok) llm_set_session_key(key)
+  ok
+}
+
 llm_api_key <- function() {
   prof <- svy_profile()
-  env <- if (identical(SVY_SETTINGS$key_source, "server")) Sys.getenv(prof$key_var) else ""
+  env <- if (server_key_open()) Sys.getenv(prof$key_var) else ""
   key <- llm_session_key() %||% env
   if (!nzchar(key))
     stop("No API key. Paste one on the Start here tab",
