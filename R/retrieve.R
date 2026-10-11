@@ -37,8 +37,10 @@ store_driver <- function(path) {
     .store_env$drv <- duckdb::duckdb(dbdir = path, read_only = TRUE,
       config = list(home_directory = tempdir(),
                     # Small hosts (shinyapps.io: 1 GB) kill a process that lets
-                    #   DuckDB take most of the machine.
-                    memory_limit = "300MB", threads = "1"))
+                    #   DuckDB take most of the machine. Raise both on a bigger server
+                    #   (e.g. SVYMETH_DUCKDB_MEMORY=2GB, SVYMETH_DUCKDB_THREADS=4).
+                    memory_limit = Sys.getenv("SVYMETH_DUCKDB_MEMORY", "300MB"),
+                    threads = Sys.getenv("SVYMETH_DUCKDB_THREADS", "1")))
   .store_env$drv
 }
 
