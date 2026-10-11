@@ -78,7 +78,9 @@ mod_start_server <- function(id, state) {
           `Embedding` = paste0(prof$embed, " (", SVY_SETTINGS$embed_dims, " dims)"),
           `Store built` = m$built_at %||% "--",
           `Store contents` = if (length(m)) paste0(m$n_docs, " files, ", m$n_chunks, " chunks") else "--",
-          `Store status` = state$store_error %||% "ready"),
+          `Store status` = state$store_error %||% "ready",
+          `Owner key on server` = if (nzchar(Sys.getenv(prof$key_var))) "yes" else "no",
+          `Passphrase set` = if (nzchar(Sys.getenv("RAGTIME_PASSPHRASE"))) "yes" else "no"),
           function(v, k) shiny::tags$tr(shiny::tags$th(k), shiny::tags$td(v)))))
     })
   })
