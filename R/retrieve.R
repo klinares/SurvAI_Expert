@@ -33,7 +33,10 @@ open_store <- function(path = svy_store_path()) {
   if (!file.exists(path))
     stop("No store at ", path, ". Build it with build_store.R.", call. = FALSE)
   con <- DBI::dbConnect(duckdb::duckdb(), dbdir = path, read_only = TRUE,
-                        config = list(home_directory = tempdir()))
+                        config = list(home_directory = tempdir(),
+                                      # Small hosts (shinyapps.io: 1 GB) kill a process
+                                      #   that lets DuckDB take most of the machine.
+                                      memory_limit = "300MB", threads = "1"))
   DBI::dbExecute(con, "SET enable_progress_bar = false")
   meta <- DBI::dbGetQuery(con, "SELECT key, value FROM svy_meta")
   meta <- stats::setNames(as.list(meta$value), meta$key)

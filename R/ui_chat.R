@@ -25,12 +25,16 @@ search_query <- function(question, previous = NULL)
 
 ask_methodologist <- function(chat, st, question, k = SVY_SETTINGS$top_k, previous = NULL) {
   t0 <- Sys.time()
+  message("[ask] retrieving...")
   h <- retrieve(st, search_query(question, previous), k)
+  message(sprintf("[ask] retrieved %d chunks in %.1fs; calling model...", nrow(h),
+                  as.numeric(difftime(Sys.time(), t0, units = "secs"))))
   if (!nrow(h)) return(list(answer = "Nothing in the course materials matched that question.",
                             hits = h, secs = NA_real_))
   prompt <- paste0("Retrieved course materials:\n\n", build_context(h),
                    "\n\n----\nQuestion: ", question)
   ans <- as.character(chat$chat(prompt, echo = "none"))
+  message(sprintf("[ask] answered at %.1fs", as.numeric(difftime(Sys.time(), t0, units = "secs"))))
   trim_last_user_turn(chat, question)
   list(answer = ans, hits = h,
        secs = as.numeric(difftime(Sys.time(), t0, units = "secs")))
