@@ -26,17 +26,26 @@ svy_tokens <- function(txt) {
   pl <- nchar(tk) > 4 & grepl("[^s]s$", tk); tk[pl] <- sub("s$", "", tk[pl]); tk
 }
 
-# A connection per session, read-only. home_directory points DuckDB at a
-#   writable temp folder: on Windows it otherwise tries to create ~/.duckdb
-#   (and can raise a hidden dialog), and on Connect the home may be read-only.
+# ONE database handle for the whole R process, a connection per session. A
+#   session ending (a page refresh, a closed tab) closes only its own connection:
+#   shutting the database down would kill every other session, including the
+#   page that just replaced it.
+.store_env <- new.env(parent = emptyenv())
+
+store_driver <- function(path) {
+  if (is.null(.store_env$drv))
+    .store_env$drv <- duckdb::duckdb(dbdir = path, read_only = TRUE,
+      config = list(home_directory = tempdir(),
+                    # Small hosts (shinyapps.io: 1 GB) kill a process that lets
+                    #   DuckDB take most of the machine.
+                    memory_limit = "300MB", threads = "1"))
+  .store_env$drv
+}
+
 open_store <- function(path = svy_store_path()) {
   if (!file.exists(path))
     stop("No store at ", path, ". Build it with build_store.R.", call. = FALSE)
-  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = path, read_only = TRUE,
-                        config = list(home_directory = tempdir(),
-                                      # Small hosts (shinyapps.io: 1 GB) kill a process
-                                      #   that lets DuckDB take most of the machine.
-                                      memory_limit = "300MB", threads = "1"))
+  con <- DBI::dbConnect(store_driver(path))
   DBI::dbExecute(con, "SET enable_progress_bar = false")
   meta <- DBI::dbGetQuery(con, "SELECT key, value FROM svy_meta")
   meta <- stats::setNames(as.list(meta$value), meta$key)
@@ -45,7 +54,7 @@ open_store <- function(path = svy_store_path()) {
 }
 
 close_store <- function(st)
-  try(DBI::dbDisconnect(st$con, shutdown = TRUE), silent = TRUE)
+  try(DBI::dbDisconnect(st$con), silent = TRUE)
 
 # Refuses a mismatch rather than returning plausible, wrong sources.
 check_store_matches <- function(st, prof = svy_profile()) {
