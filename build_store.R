@@ -11,6 +11,10 @@
 #   BUILD$cache. If it stops (network, quota), run it again; finished work is
 #   not repeated. Delete the cache folder only to force a full rebuild.
 #
+# External books: the chapter markdown under external/ (written by
+#   fetch_external.R, committed to this repo) is indexed too, tagged
+#   tier = "external" so retrieval can tell it from the coursework.
+#
 # Set SVYMETH_CORPUS to your copy of UMD_JPSM_coursework, run this, then
 #   deploy (deploy.R). SVYMETH_BOOK (a PDF) is only a fallback for a corpus
 #   without practical_tools_textbook/; leave it unset otherwise.
@@ -19,7 +23,7 @@ suppressPackageStartupMessages({
   library(dplyr); library(purrr); library(stringr); library(tibble); library(DBI)
 })
 invisible(lapply(c(sort(list.files("R", "^(config|llm.*)\\.R$", full.names = TRUE)),
-                   "R/retrieve.R", "build/extract.R"), source))
+                   "R/retrieve.R", "R/library.R", "build/extract.R"), source))
 
 BUILD <- list(
   corpus = Sys.getenv("SVYMETH_CORPUS"),
@@ -65,6 +69,9 @@ build_store <- function(out = svy_store_path()) {
   has_md_book <- any(startsWith(map_chr(docs, "origin"), paste0(TEXTBOOK_DIR, "/")))
   if (!has_md_book && nzchar(BUILD$book))
     docs <- c(docs, book_documents(BUILD$book, BUILD$cache) %||% list())
+  ext <- ext_documents(file.path(svy_app_dir(), "external"))
+  message(length(ext), " external book chapters (", paste(names(SVY_LIBRARY), collapse = ", "), ")")
+  docs <- c(docs, ext)
   empty <- map_lgl(docs, function(d) nchar(str_trim(d$md)) < 60)
   if (any(empty)) message(sum(empty), " files had no usable text (scanned/image-only): ",
                           paste(basename(map_chr(docs[empty], "origin")), collapse = "; "))
@@ -72,7 +79,7 @@ build_store <- function(out = svy_store_path()) {
 
   # 2. chunk -------------------------------------------------------------------
   chunks <- map(docs, function(d) {
-    size <- if (grepl(paste0("^(book|", TEXTBOOK_DIR, ")/"), d$origin)) BUILD$book_chunk else BUILD$chunk_size
+    size <- if (grepl(paste0("^(book|ext|", TEXTBOOK_DIR, ")/"), d$origin)) BUILD$book_chunk else BUILD$chunk_size
     ch <- tryCatch(ragnar::markdown_chunk(ragnar::MarkdownDocument(d$md, origin = d$origin),
                                           target_size = size, target_overlap = BUILD$overlap),
                    error = function(e) NULL)
@@ -136,13 +143,28 @@ build_store <- function(out = svy_store_path()) {
   dbWriteTable(con, "svy_len", as.data.frame(lens))
   dbWriteTable(con, "svy_idf", as.data.frame(idf))
   dbWriteTable(con, "svy_meta", data.frame(
-    key = c("embed_model", "embed_dims", "built_at", "n_docs", "n_chunks", "corpus"),
+    key = c("embed_model", "embed_dims", "built_at", "n_docs", "n_chunks", "corpus", "external"),
     value = c(prof$embed, d, format(Sys.time(), "%Y-%m-%d %H:%M"),
-              n_distinct(chunks$origin), N, basename(BUILD$corpus))))
+              n_distinct(chunks$origin), N, basename(BUILD$corpus),
+              paste(unique(meta$course[meta$tier == "external"]), collapse = ","))))
   dbExecute(con, "CHECKPOINT")
   dbDisconnect(con, shutdown = TRUE)
+
+  # Compact: building leaves freed blocks behind (the dropped staging tables),
+  #   which more than doubled the file and pushed it past GitHub's 100 MB limit.
+  #   Copying into a fresh database keeps only live data.
+  packed <- file.path(dirname(out), "store_packed.duckdb"); unlink(packed)
+  con <- dbConnect(duckdb::duckdb(), dbdir = packed, config = list(home_directory = tempdir()))
+  dbExecute(con, sprintf("ATTACH '%s' AS src (READ_ONLY)", gsub("\\\\", "/", tmp)))
+  dbExecute(con, "COPY FROM DATABASE src TO store_packed")
+  dbExecute(con, "DETACH src")
+  dbDisconnect(con, shutdown = TRUE)
+  unlink(tmp)
+
   unlink(out)
-  if (!file.rename(tmp, out)) { file.copy(tmp, out, overwrite = TRUE); unlink(tmp) }
+  if (!file.rename(packed, out)) { file.copy(packed, out, overwrite = TRUE); unlink(packed) }
+  if (file.info(out)$size > 95e6)
+    warning("store is ", round(file.info(out)$size / 1e6), " MB: close to GitHub's 100 MB file limit")
   message(sprintf("store written: %s (%.0f MB) in %.1f min", out, file.info(out)$size / 1e6,
                   as.numeric(difftime(Sys.time(), t0, units = "mins"))))
   print(count(meta, doc_type, sort = TRUE))

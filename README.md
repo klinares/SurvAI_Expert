@@ -32,11 +32,14 @@ rag_time/
 │   ├── retrieve.R          vector + keyword search in DuckDB, rank fusion
 │   ├── reflexes.R          the methodologist's habits, prohibitions, answer audit
 │   ├── render.R            markdown + LaTeX (KaTeX → MathML), sources
+│   ├── library.R           the external books: titles, web links
 │   ├── help.R, ui_start.R  tab 1: Start here (docs + your key)
 │   ├── ui_chat.R           tab 2: Methodologist (the chat)
 │   └── llm_openrouter.R    optional provider override — delete where not used
 ├── store/jpsm.duckdb    ♩  the index (~70 MB, fits GitHub)
-├── build_store.R        𝄽  rebuilds the store from the coursework (not deployed)
+├── build_store.R        𝄽  rebuilds the store from the coursework + external/ (not deployed)
+├── fetch_external.R     𝄽  one-time: external books → external/<book>/*.md
+├── external/            𝄽  converted book chapters (committed; travels to work)
 ├── convert_pdfs.R       𝄽  one-time: PDFs → markdown with LaTeX math (vision model)
 ├── parse_textbook.R     𝄽  textbook PDF → one markdown file per chapter
 ├── catalog_equations.R  𝄽  one-time: named catalogue of every equation
@@ -81,6 +84,17 @@ markdown file per chapter under `UMD_JPSM_coursework/practical_tools_textbook/`
 (`SVYMETH_BOOK` = the PDF). The build then indexes those files like any other
 course file. The textbook is copyrighted: keep that repository private.
 
+**The external books.** Two open books back up the coursework: the Tidy
+Survey Book (from its `.Rmd` sources in your clone, `SVYMETH_TIDY`, default
+`D:/repos/tidy-survey-book`) and *Sampling and Survey Techniques* (downloaded
+from bookdown.org; it has no public source repo). Run `fetch_external.R` at
+home; it writes `external/<book>/<chapter>.md`, which you commit. The build
+indexes those with `tier = "external"`, and retrieval multiplies their scores
+by `external_weight` (0.85, `R/config.R`) so your coursework wins ties. Source
+links open the published chapter (`R/library.R`). At work nothing changes:
+`build_store.R` reads `external/` from the repo and only embeds. To add a book,
+add it to `R/library.R` and a fetcher to `fetch_external.R`.
+
 **Scoring the melody (one-time, then committed to the coursework repo).**
 `convert_pdfs.R` sends each PDF page that holds mathematics, or has no usable
 text, to a vision model and writes `Lecture6.md` beside `Lecture6.pdf`, with
@@ -118,7 +132,7 @@ for the course's own code.
 
 shiny, bslib, shinychat, ellmer, httr2, duckdb, DBI, dplyr, purrr, stringr,
 tibble, katex, commonmark, htmltools — plus ragnar, pdftools, stringi, fs,
-tidyr, rlang to build.
+tidyr, rlang to build, and xml2 + rmarkdown (pandoc) to fetch the books.
 
 ```
   ♪  fin.  "Don't play this piece fast. It is never right to play ragtime fast."

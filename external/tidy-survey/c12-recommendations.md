@@ -1,0 +1,228 @@
+<!-- source: https://tidy-survey-r.github.io/tidy-survey-book/c12-recommendations.html -->
+
+# Successful survey analysis recommendations
+
+### Prerequisites
+
+For this chapter, load the following packages:
+```r
+library(tidyverse)
+library(survey)
+library(srvyr)
+library(srvyrexploR)
+```
+
+To illustrate the importance of data visualization, we discuss Anscombe's Quartet. The dataset can be replicated by running the code below:
+
+```r
+anscombe_tidy <- anscombe %>%
+  mutate(obs = row_number()) %>%
+  pivot_longer(-obs, names_to = "key", values_to = "value") %>%
+  separate(key, c("variable", "set"), 1, convert = TRUE) %>%
+  mutate(set = c("I", "II", "III", "IV")[set]) %>%
+  pivot_wider(names_from = variable, values_from = value)
+```
+
+We create an example survey dataset to explain potential pitfalls and how to overcome them in survey analysis. To recreate the dataset, run the code below:
+
+```r
+example_srvy <- tribble(
+  ~id, ~region, ~q_d1,                 ~q_d2_1, ~gender, ~weight,
+   1L,   1L,    1L,      "Somewhat interested", "female",  1740,
+   2L,   1L,    1L,    "Not at all interested", "female",  1428,
+   3L,   2L,    NA,      "Somewhat interested", "female",   496,
+   4L,   2L,    1L,    "Not at all interested", "female",   550,
+   5L,   3L,    1L,      "Somewhat interested", "female",  1762,
+   6L,   4L,    NA,          "Very interested", "female",  1004,
+   7L,   4L,    NA,      "Somewhat interested", "female",   522,
+   8L,   3L,    2L,    "Not at all interested", "female",  1099,
+   9L,   4L,    2L,      "Somewhat interested", "female",  1295,
+   10L,  2L,    2L,      "Somewhat interested",   "male",   983
+)
+
+example_des <-
+  example_srvy %>%
+  as_survey_design(weights = weight)
+```
+
+## Introduction
+
+The previous chapters in this book aimed to provide the technical skills and knowledge required for running survey analyses. This chapter builds upon the previously mentioned best practices to present a curated set of recommendations for running a successful survey analysis. We hope this list provides practical insights that assist in producing meaningful and reliable results.
+
+## Follow the survey analysis process
+
+As we first introduced in Chapter \@ref(c04-getting-started), there are four main steps to successfully analyze survey data:
+
+1. Create a `tbl_svy` object (a survey object) using: `as_survey_design()` or `as_survey_rep()`
+
+2. Subset data (if needed) using `filter()` (to create subpopulations)
+
+3. Specify domains of analysis using `group_by()` 
+
+4. Within `summarize()`, specify variables to calculate, including means, totals, proportions, quantiles, and more
+
+The order of these steps matters in survey analysis. For example, if we need to subset the data, we must use `filter()` on our data after creating the survey design. If we do this before the survey design is created, we may not be correctly accounting for the study design, resulting in inaccurate findings.
+
+Additionally, correctly identifying the survey design is one of the most important steps in survey analysis.  Knowing the type of sample design (e.g., clustered, stratified) helps ensure the underlying error structure is correctly calculated and weights are correctly used. Learning about complex design factors such as clustering, stratification, and weighting is foundational to complex survey analysis, and we recommend that all analysts review Chapter \@ref(c10-sample-designs-replicate-weights) before creating their first design object. Reviewing the documentation (see Chapter \@ref(c03-survey-data-documentation)) helps us understand what variables to use from the data.
+
+Making sure to use the survey analysis functions from the {srvyr} and {survey} packages is also important in survey analysis. For example, using `mean()` and `survey_mean()` on the same data results in different findings and outputs. Each of the survey functions from {srvyr} and {survey} impacts standard errors and variance, and we cannot treat complex surveys as unweighted simple random samples if we want to produce unbiased estimates [@R-srvyr; @lumley2010complex]. 
+
+## Begin with descriptive analysis
+
+When receiving a fresh batch of data, it is tempting to jump right into running models to find significant results. However, a successful data analyst begins by exploring the dataset. Chapter \@ref(c11-missing-data) talks about the importance of reviewing data when examining missing data patterns. In this chapter, we illustrate the value of reviewing all types of data. This involves running descriptive analysis on the dataset as a whole, as well as individual variables and combinations of variables. As described in Chapter \@ref(c05-descriptive-analysis), descriptive analyses should always precede statistical analysis to prevent avoidable (and potentially embarrassing) mistakes.
+
+### Table review
+
+Even before applying weights, consider running cross-tabulations on the raw data. Cross-tabs can help us see if any patterns stand out that may be alarming or something worth further investigating.
+
+For example, let’s explore the example survey dataset introduced in the Prerequisites box, `example_srvy`. We run the code below on the unweighted data to inspect the `gender` variable:
+
+```r
+example_srvy %>% 
+  group_by(gender) %>% 
+  summarize(n = n())
+```
+
+The data show that females comprise 9 out of 10, or 90%, of the sample. Generally, we assume something close to a 50/50 split between male and female respondents in a population. The sizable female proportion could indicate either a unique sample or a potential error in the data. If we review the survey documentation and see this was a deliberate part of the design, we can continue our analysis using the appropriate methods. If this was not an intentional choice by the researchers, the results alert us that something may be incorrect in the data or our code, and we can verify if there’s an issue by comparing the results with the weighted means.
+
+### Graphical review
+
+Tables provide a quick check of our assumptions, but there is no substitute for graphs and plots to visualize the distribution of data. We might miss outliers or nuances if we scan only summary statistics. 
+
+For example, Anscombe's Quartet demonstrates the importance of visualization in analysis. Let's say we have a dataset with x- and y-variables in an object called `anscombe_tidy`. Let's take a look at how the dataset is structured:
+
+```r
+head(anscombe_tidy)
+```
+
+We can begin by checking one set of variables. For Set I, the x-variables have an average of 9 with a standard deviation of 3.3; for y, we have an average of 7.5 with a standard deviation of 2.03. The two variables have a correlation of 0.81.
+
+```r
+anscombe_tidy %>% 
+  filter(set == "I") %>% 
+  summarize(
+    x_mean = mean(x),
+    x_sd = sd(x),
+    y_mean = mean(y),
+    y_sd = sd(y),
+    correlation = cor(x, y)
+  )
+```
+
+These are useful statistics. We can note that the data do not have high variability, and the two variables are strongly correlated. Now, let’s check all the sets (I-IV) in the Anscombe data. Notice anything interesting?
+
+```r
+anscombe_tidy %>% 
+  group_by(set) %>%
+  summarize(
+    x_mean = mean(x),
+    x_sd = sd(x, na.rm = TRUE),
+    y_mean = mean(y),
+    y_sd = sd(y, na.rm = TRUE),
+    correlation = cor(x, y)
+  )
+```
+
+The summary results for these four sets are nearly identical! Based on this, we might assume that each distribution is similar. Let's look at a graphical visualization to see if our assumption is correct (see Figure \@ref(fig:recommendations-anscombe-plot)).
+
+```r
+
+ggplot(anscombe_tidy, aes(x, y)) +
+  geom_point() +
+  facet_wrap( ~ set) +
+  geom_smooth(method = "lm", se = FALSE, alpha = 0.5) +
+  theme_minimal()
+```
+
+Although each of the four sets has the same summary statistics and regression line, when reviewing the plots (see Figure \@ref(fig:recommendations-anscombe-plot)), it becomes apparent that the distributions of the data are not the same at all. Each set of points results in different shapes and distributions. Imagine sharing each set (I-IV) and the corresponding plot with a different colleague. The interpretations and descriptions of the data would be very different even though the statistics are similar.   Plotting data can also ensure that we are using the correct analysis method on the data, so understanding the underlying distributions is an important first step.
+
+## Check variable types
+
+When we pull the data from surveys into R, the data may be listed as character, factor, numeric, or logical/Boolean.  The tidyverse functions that read in data (e.g., `read_csv()`, `read_excel()`) default to have all strings load as character variables. This is important when dealing with survey data, as many strings may be better suited for factors than character variables. For example, let's revisit the `example_srvy` data. Taking a `glimpse()` of the data gives us insight into what it contains:
+
+```r
+example_srvy %>%
+  glimpse()
+```
+
+The output shows that `q_d2_1` is a character variable, but the values of that variable show three options (Very interested / Somewhat interested / Not at all interested). In this case, we most likely want to change `q_d2_1` to be a factor variable and order the factor levels to indicate that this is an ordinal variable.  Here is some code on how we might approach this task using the {forcats} package [@R-forcats]:
+
+```r
+example_srvy_fct <- example_srvy %>%
+  mutate(q_d2_1_fct = factor(
+    q_d2_1,
+    levels = c("Very interested",
+               "Somewhat interested",
+               "Not at all interested")
+  ))
+
+example_srvy_fct %>%
+  glimpse()
+
+example_srvy_fct %>%
+  count(q_d2_1_fct, q_d2_1)
+```
+
+ 
+This example dataset also includes a column called `region`, which is imported as a number (`<int>`). This is a good reminder to use the questionnaire and codebook along with the data to find out if the values actually reflect a number or are perhaps a coded categorical variable (see Chapter \@ref(c03-survey-data-documentation) for more details). R calculates the mean even if it is not appropriate, leading to the common mistake of applying an average to categorical values instead of a proportion function. For example, for ease of coding, we may use the `across()` function to calculate the mean across all numeric variables:    
+
+```r
+example_des %>%
+  select(-weight) %>%
+  summarize(across(where(is.numeric), ~ survey_mean(.x, na.rm = TRUE)))
+```
+
+In this example, if we do not adjust `region` to be a factor variable type, we might accidentally report an average region of `r round(example_des %>% summarize(across(where(is.numeric), ~ survey_mean(.x, na.rm = TRUE))) %>% pull(region), 2)` in our findings, which is meaningless. Checking that our variables are appropriate avoids this pitfall and ensures the measures and models are suitable for the variable type.
+
+## Improve debugging skills
+
+It is common for analysts working in R to come across warning or error messages, and learning how to debug these messages (i.e., find and fix issues) ensures we can proceed with our work and avoid potential mistakes.
+
+We've discussed a few examples in this book. For example, if we calculate an average with `survey_mean()` and get `NA` instead of a number, it may be because our column has missing values. 
+
+```r
+example_des %>%
+  summarize(mean = survey_mean(q_d1))
+```
+
+Including the `na.rm = TRUE` would resolve the issue: 
+
+```r
+example_des %>%
+  summarize(mean = survey_mean(q_d1, na.rm = TRUE))
+```
+ 
+
+Another common error message that we may see with survey analysis may look something like the following: 
+
+```r
+example_des %>% 
+  svyttest(q_d1~gender)
+```
+
+In this case, we need to remember that with functions from the {survey} packages like `svyttest()`, the design object is not the first argument, and we have to use the dot (`.`) notation (see Chapter \@ref(c06-statistical-testing)).  Adding in the named argument of `design=.` fixes this error.
+
+```r
+example_des %>%
+  svyttest(q_d1 ~ gender,
+           design = .)
+```
+
+Often, debugging involves interpreting the message from R. For example, if our code results in this error:
+
+```
+Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
+  contrasts can be applied only to factors with 2 or more levels
+```
+
+We can see that the error has to do with a function requiring a factor with two or more levels and that it has been applied to something else. This ties back to our section on using appropriate variable types. We can check the variable of interest to examine whether it is the correct type. 
+
+The internet also offers many resources for debugging. Searching for a specific error message can often lead to a solution. In addition, we can post on community forums like [Posit Community](https://forum.posit.co/) for direct help from others. 
+
+## Think critically about conclusions
+
+Once we have our findings, we need to learn to think critically about them. As mentioned in Chapter \@ref(c02-overview-surveys), many aspects of the study design can impact our interpretation of the results, for example, the number and types of response options provided to the respondent or who was asked the question (both thinking about the full sample and any skip patterns). Knowing the overall study design can help us accurately think through what the findings may mean and identify any issues with our analyses. Additionally, we should make sure that our survey design object is correctly defined (see Chapter \@ref(c10-sample-designs-replicate-weights)), carefully consider how we are managing missing data (see Chapter \@ref(c11-missing-data)), and follow statistical analysis procedures such as avoiding model overfitting by using too many variables in our formulas.
+
+These considerations allow us to conduct our analyses and review findings for statistically significant results. It is important to note that even significant results do not mean that they are meaningful or important. A large enough sample can produce statistically significant results. Therefore, we want to look at our results in context, such as comparing them with results from other studies or analyzing them in conjunction with confidence intervals and other measures.
+
+Communicating the results (see Chapter \@ref(c08-communicating-results)) in an unbiased manner is also a critical step in any analysis project. If we present results without error measures or only present results that support our initial hypotheses, we are not thinking critically and may incorrectly represent the data. As survey data analysts, we often interpret the survey data for the public. We must ensure that we are the best stewards of the data and work to bring light to meaningful and interesting findings that the public wants and needs to know about.

@@ -35,6 +35,10 @@ SVY_SETTINGS <- list(
   pool        = 40L,      # candidates per retriever before fusion
   rrf_k       = 60L,
   card_weight_code = 0.5, # formula-card score multiplier on R-code questions
+  # External books (R/library.R) back up the coursework rather than compete
+  #   with it: their fused scores are multiplied by this, so on a tie your own
+  #   course material ranks first. 1 = no preference. Tune with eval/eval_rag.R.
+  external_weight = as.numeric(Sys.getenv("SVYMETH_EXTERNAL_WEIGHT", "0.85")),
   ctx_chars   = 1800L,    # per-chunk cap in the prompt
   max_tokens  = 3000L,
   timeout     = 120,

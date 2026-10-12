@@ -78,6 +78,10 @@ mod_start_server <- function(id, state) {
           `Embedding` = paste0(prof$embed, " (", SVY_SETTINGS$embed_dims, " dims)"),
           `Store built` = m$built_at %||% "--",
           `Store contents` = if (length(m)) paste0(m$n_docs, " files, ", m$n_chunks, " chunks") else "--",
+          `External books` = if (nzchar(m$external %||% ""))
+            paste(purrr::map_chr(strsplit(m$external, ",")[[1]],
+                                 function(b) SVY_LIBRARY[[b]]$short %||% b), collapse = "; ")
+            else "none in this store",
           `Store status` = state$store_error %||% "ready",
           `Owner key on server` = if (nzchar(Sys.getenv(prof$key_var))) "yes" else "no",
           `Passphrase set` = if (nzchar(Sys.getenv("RAGTIME_PASSPHRASE"))) "yes" else "no"),

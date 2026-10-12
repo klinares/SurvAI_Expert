@@ -120,7 +120,8 @@ retrieve <- function(st, query, k = SVY_SETTINGS$top_k, qvec = NULL) {
   #   from some other file; formula cards count for less on such questions.
   w <- if (is_code_question(query)) SVY_SETTINGS$card_weight_code else 1
   dplyr::inner_join(f, rows, by = "id") |>
-    dplyr::mutate(score = dplyr::if_else(doc_type == "equation", score * w, score)) |>
+    dplyr::mutate(score = dplyr::if_else(doc_type == "equation", score * w, score),
+                  score = dplyr::if_else(tier == "external", score * SVY_SETTINGS$external_weight, score)) |>
     dplyr::arrange(dplyr::desc(score)) |>
     # one passage and at most one formula card per file
     dplyr::distinct(origin, is_eq = doc_type == "equation", .keep_all = TRUE) |>
@@ -131,8 +132,11 @@ retrieve <- function(st, query, k = SVY_SETTINGS$top_k, qvec = NULL) {
                     stringr::str_match(text, "## Page (\\d+)")[, 2])))
 }
 
+# External passages are named as books, so the model can tell the analyst
+#   which part of an answer is their coursework and which is a book.
 build_context <- function(h)
-  paste(sprintf("[%s] %s%s\n%s", h$label, h$origin,
+  paste(sprintf("[%s] %s%s\n%s", h$label,
+                ifelse(is_external(h$origin), paste0("[external book] ", ext_label(h$origin)), h$origin),
                 ifelse(is.na(h$page), "", paste0(" (p. ", h$page, ")")),
                 stringr::str_trunc(stringr::str_squish(h$text),
                                    SVY_SETTINGS$ctx_chars)),

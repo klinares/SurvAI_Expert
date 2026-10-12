@@ -191,12 +191,25 @@ book_documents <- function(path, cache_dir) {
   }) |> purrr::compact()
 }
 
+# --- external books (fetch_external.R) --------------------------------------
+# external/<book>/<chapter>.md -> origin "ext/<book>/<chapter>.md". The leading
+#   "<!-- source: ... -->" line is dropped; R/library.R builds the link.
+ext_documents <- function(dir = "external") {
+  if (!dir.exists(dir)) { message("no external/ folder -- external books skipped"); return(list()) }
+  f <- sort(as.character(fs::dir_ls(dir, recurse = TRUE, glob = "*.md")))
+  purrr::map(f, function(p) list(
+    origin = paste0("ext/", rel_of(p, dir)),
+    md = tidy_text(sub("^<!--[^>]*-->\\s*", "",
+                       paste(readLines(p, warn = FALSE, encoding = "UTF-8"), collapse = "\n")))))
+}
+
 # --- metadata from the origin path -----------------------------------------
 doc_meta <- function(origin) {
   p1 <- stringr::str_split_i(origin, "/", 1); p2 <- tolower(stringr::str_split_i(origin, "/", 2))
   ext <- tolower(tools::file_ext(origin))
   n_parts <- stringr::str_count(origin, "/") + 1
   dt <- dplyr::case_when(
+    p1 == "ext" ~ "external_book",           # fetch_external.R; see R/library.R
     p1 %in% c("book", TEXTBOOK_DIR) ~ "textbook",
     p2 == "lectures" ~ "lecture",
     n_parts == 2 & ext == "pdf" ~ "notes",
@@ -208,8 +221,10 @@ doc_meta <- function(origin) {
     TRUE ~ "code")
   tibble::tibble(
     origin = origin, doc_type = dt,
-    course = dplyr::if_else(p1 %in% c("book", TEXTBOOK_DIR), "BOOK",
-                            dplyr::coalesce(stringr::str_extract(p1, "SURV\\d{3}"), p1)),
-    tier = dplyr::case_when(dt %in% c("lecture", "notes", "textbook", "assignment", "exam") ~ "core",
+    course = dplyr::case_when(p1 == "ext" ~ p2,
+                              p1 %in% c("book", TEXTBOOK_DIR) ~ "BOOK",
+                              TRUE ~ dplyr::coalesce(stringr::str_extract(p1, "SURV\\d{3}"), p1)),
+    tier = dplyr::case_when(dt == "external_book" ~ "external",
+                            dt %in% c("lecture", "notes", "textbook", "assignment", "exam") ~ "core",
                             TRUE ~ "widened"))
 }

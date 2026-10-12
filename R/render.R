@@ -51,6 +51,11 @@ render_markdown <- function(text) {
 
 source_link <- function(origin, page) {
   if (startsWith(origin, "book/")) return(htmltools::htmlEscape(origin))
+  if (is_external(origin)) {
+    u <- ext_url(origin)
+    lab <- htmltools::htmlEscape(ext_label(origin))
+    return(if (is.na(u)) lab else sprintf("<a href='%s' target='_blank'>%s</a> <span class='badge text-bg-light'>book</span>", u, lab))
+  }
   enc <- paste(purrr::map_chr(strsplit(origin, "/")[[1]],
                               function(s) utils::URLencode(s, reserved = TRUE)), collapse = "/")
   url <- paste0(sub("{path}", enc, SVY_SOURCE_URL, fixed = TRUE),
@@ -76,7 +81,7 @@ audit_html <- function(audit) {
   msgs <- c(
     if (length(audit$bad_cite))
       paste0("Cites ", paste(audit$bad_cite, collapse = ", "),
-             ", which was not among the retrieved sources."),
+             ", which is not one of the retrieved sources."),
     if (length(audit$eq_unsourced))
       paste0(length(audit$eq_unsourced), " of ", audit$n_eq,
              " displayed formula(s) do not appear in the retrieved sources; check them against the course material before use."))

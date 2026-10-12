@@ -6,6 +6,16 @@ HELP_MD <- '
 An **AI Survey Methodologist** that answers from your own JPSM coursework:
 lecture slides and notes, the *Practical Tools for Designing and Weighting
 Survey Samples* textbook, and the Quarto/R code from assignments, labs and exams.
+Behind them sit two open books, used to fill gaps and for worked R examples:
+
+- *Exploring Complex Survey Data Analysis Using R* (the "Tidy Survey Book",
+  Zimmer, Powell & Velasquez): design objects, replicate weights, means,
+  proportions, quantiles, totals and ratios by group, tests, models, reporting.
+- *Sampling and Survey Techniques* (Siregar): sampling methods, margin of error,
+  questionnaire design, data collection and validation.
+
+Book passages are marked **book** in the source list and link to the published
+chapter. Your coursework ranks first when both cover a point.
 For every question it retrieves the most relevant passages, answers from them,
 and cites each one as **[S1]**, **[S2]** ... with a link to the file.
 
@@ -29,7 +39,8 @@ rather than left to the model.
   whether every displayed formula was found in a retrieved source. A formula
   flagged there came from the model, not your notes -- check it.
 - **Citations** are checked too: a label that was not retrieved is flagged.
-- **Sources** open the file in the coursework repository (PDFs at the page).
+- **Sources** open the file in the coursework repository (PDFs at the page), or
+  the book chapter on the web.
 - If the materials do not cover a question the assistant should say so. It is
   not a general-purpose chatbot and is told not to fill gaps silently.
 
